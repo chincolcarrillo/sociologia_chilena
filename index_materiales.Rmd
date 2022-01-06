@@ -10,6 +10,11 @@ knitr::opts_chunk$set(include = TRUE, echo = TRUE)
 ## Web scrapping con rvest
 Ejemplo en el GoogleColab [rvest_1.pynb](https://colab.research.google.com/drive/1s53lhBalLzvHWYp797M48TPrGntLKxnn?usp=sharing#scrollTo=iPO1AB3BXe9e) 
 
+```{r}
+dfSummary(resumen_descr, style = "grid", plain.ascii = FALSE)
+```
+
+
 Funciones:
 
 * read_html() para descargar el html

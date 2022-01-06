@@ -2,10 +2,10 @@
 title:  | 
  ![](input/images/logo_facso.png){width=1.5in}  
  
- Conocimiento indexado: Un análisis de la producción sociológica chilena del siglo XXI disponible en Web of Science
+ La sociología chilena entre 2000-2021 en Web of Science: un análisis computacional de texto
   
 subtitle: "Ciencias Sociales Computacionales 2021, Facultad de Ciencias Sociales de la Universidad de Chile"
-author: "Carolina Carrillo"
+author: "Carolina Carrillo Devia"
 date: "`r format(Sys.time(), '%d/%m/%Y')`"
 output: 
   html_document:
@@ -20,49 +20,425 @@ nocite: '@*'
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
 ```
+
+```{r paquetes y set-ups}
+# 1. Cargar librerias
+# install.packages("pacman")
+library(pacman)
+p_load(readxl, tibble, summarytools, dplyr, tidyverse, tidytext, quanteda, tm, stm, reshape2, ggplot2, ggthemes, igraph)
+# 2. Evitar notacion cientifica
+options(scipen = 999)
+```
+
+```{r general data, message=FALSE, warning=FALSE}
+# 1. Descarga datos
+wos_original <- read_excel("input/data/resultados_wos.xls")
+
+# 2. Seleccion y etiquetamiento de variables
+wos_select <- wos_original %>% 
+  dplyr::select(autores = `Author Full Names`,
+                titulo = `Article Title`, 
+                revista = `Source Title`, 
+                idioma = Language,
+                tipo = `Document Type`,
+                keywords = `Author Keywords`,
+                keywords_p = `Keywords Plus`,
+                abstract = Abstract,
+                citations = `Times Cited, All Databases`,
+                year = `Publication Year`)
+
+# 3. Filtro de estudio empirico, teorico o revision sistematica
+wos_data <- wos_select %>% dplyr::filter(tipo !="Editorial Material" 
+                                         & tipo !="Correction" 
+                                         & tipo !="Book Review"
+                                         & tipo !="Biographical-Item"
+                                         & tipo !="Book Review; Early Access")
+
+# 4. Identificador de paper
+wos_data <- tibble::rowid_to_column(wos_data, "ID")
+```
+
+
+```{r token data, message=FALSE, warning=FALSE}
+# 1. Se tokeniza el texto correspondiente al abstract (a), palabras clave del autor (b) y palabras clave de la revista (c). Se filtran palabras comunes y conectores en inglés, así como palabras de menos de tres letras. Se eliminan palabras comunes en los abstract que no aportan a diferenciar temáticas.
+
+tokens_a <- wos_data %>%
+  unnest_tokens(words, abstract) %>%
+  filter(!words %in% stopwords::stopwords("en", "stopwords-iso"))
+tokens_a$words <- removeWords(tokens_a$words, c("social", "article", "analysis", "study", "variables", "studies", "paper"))
+
+tokens_b <- wos_data %>%
+  unnest_tokens(words, keywords) %>%
+  filter(!words %in% stopwords::stopwords("en", "stopwords-iso"))
+tokens_b$words <- removeWords(tokens_b$words, c("social", "article", "analysis", "study", "variables", "studies", "paper"))
+
+tokens_c <- wos_data %>%
+  unnest_tokens(words, keywords_p) %>%
+  filter(!words %in% stopwords::stopwords("en", "stopwords-iso"))
+tokens_c$words <- removeWords(tokens_c$words, c("social", "article", "analysis", "study", "variables", "studies", "paper"))
+
+wos_tokens <- bind_rows(list(tokens_a, tokens_b, tokens_c), list(tokens_a, tokens_b, tokens_c))
+
+# 2. Se procede a limpiar el dataframe, eliminando columnas utilizadas para construir la variable words, espacios en blanco, NA y otras palabras que no aportan a la identificacion sustantiva de tematicas.
+
+wos_tokens <- wos_tokens %>% dplyr::select(-abstract, -keywords, -keywords_p)
+# wos_tokens %>% count(words, sort = TRUE)
+# se repite 300 veces "based", no aporta riqueza semantica
+wos_tokens <- wos_tokens[wos_tokens$words != "based", ]
+wos_tokens <- wos_tokens[wos_tokens$words != "", ]
+wos_tokens <- na.omit(wos_tokens)
+# wos_tokens %>% count(words, sort = TRUE)
+
+# 2. Armar document-feature-matrix
+wos_dfm <- wos_tokens %>%
+  count(ID, words, sort = TRUE) %>%
+  cast_dfm(ID, words, n)
+
+```
+
 
 # Introducción
 
-Producción chilena de ciencias sociales (breve introducción histórica)
-Marco de producción actual (Universidades, ANID, centros de estudio, etc)
-Apertura de la ciencia y la inversión pública VS Producción mercantil del conocimiento
-Fenómenos de exclusión temática e institucional de investigadores/investigaciones
-Interés de describir las temáticas priorizadas los últimos veinte años (Topic Modelling de los abstract), y las redes de estos investigadores (redes de producción (x1=institución asociada, x2=país, W=coautoría))
+En los últimos años, el contexto de producción científica haexperimentando transformaciones que reorientan las proyecciones y medios de las  ciencias  sociales (Garretón, 2005). La  internacionalización  del  conocimiento, la globalización de la colaboración en investigación, así como la generalización de sistemas de  evaluación  de  la  productividad  científica, y los cambios en la valoración de la ciencia social en el norte global, vuelven a poner en el centro de la discusión la forma en que se produce el conocimiento en latinoamérica y Chile (Garretón, 2010; Navarrete, 2020; Ramos, 2005; Zúñiga-Rivas, 2009).
 
-WoS como plataforma que nos permite acceder al conocimiento indexado
-Estatus del SSCI
-Selección de filtros (indexadas bajo Sociología, que uno de los investigadores residiera en Chile, desde el 2000)
+Con el fin de discriminar la producción sociológica de alcance internacional, se escogen publicaciones en revistas indexadas bajo el Social Sciences Citation Index, utilizando la plataforma _Web Of Science_ (WOS) como motor de búsqueda de las publicaciones. Entre los artículos disponibles en WOS, se seleccionan sólo aquellos publicados entre 2001 y 2021, e indexados bajo _Sociología_, sumándole a esto que al menos alguno de los investigadores residiera en Chile al momento de la publicación.
 
-## Pregunta de investigación
+Debe señalarse que el motor de búsqueda de WOS proporciona valiosos metadatos asociados a cada artículo, los cuales pueden enriquecer el análisis temático, pero restringe el texto disponible al abstract del artículo y no al texto completo del mismo. Esto puede afectar los resultados de la presente investigación, ya que muchos artículos probablemente discuten varios temas en el texto completo, sin abordarlos explícitamente en sus en sus resúmenes.
 
-A partir de lo presentado anteriormente, y considerando la falta de investigación actual respecto a la temática, es de interés explorar ¿cómo se despliegan los discursos de campaña en redes sociales, en Tweets que mencionan a les candidates presidenciales en Chile entre el 15 y el 20 de noviembre de 2021?
 
-En esta línea, se propone analizar con fines exploratorios:
-*a.* temáticas priorizadas los últimos veinte años (Topic Modelling de los abstract)
-*b.* descripción de las agrupaciones por institución, país y el Di en la red de producción de les investigadores
-*c.*  relación entre las temáticas de investigación observadas y las caracteristicas estructurales de la red
+## Preguntas de investigación
+
+A partir de lo presentado anteriormente, y considerando la falta de investigación actual respecto a la temática, se propone analizar con fines exploratorios:
+
+*  ¿Cuáles son las temáticas más prevalentes en la producción sociológica chilena de alcance internacional, entre 2001 y 2021?
+* ¿Qué temáticas tienen mayor probabilidad de existir simultáneamente en un mismo corpus?
+* ¿Cuál es el efecto del año de publicación, idioma de publicación y veces citada, en la temática de un estudio?
 
 # Metodología
 
-Los datos se extrajeron de WoS, a partir del buscador, resultando en un data set con las variables a, b, c y d. 
-Para analizar las temáticas se usaron los abstract de WoS, eliminación de stopwords y limpieza del texto, tokenización. Topic Modelling con el paquete _tm X.X.X_ en R. Principios estadísticos que fundamentan la elección de esta técnica y especificidades. 
-Para realizar el posterior análisis de redes se usó el paquete _xx X.X.X_ en R. Definición de la red en tanto G=(V,E). Cantidad de nodos y relaciones, características identificadas para trabajar x y W. Principios de la muestra para realizar análisis uni y bivariado. Técnica a utilizar.  
+## Datos 
+
+Los datos se extrajeron de WOS, a partir del buscador (WOS, 2021), resultando en un data set con metadata de 512 artículos que publicados entre 2001 y 2021, indexados bajo _Sociología_ y al menos uno de cuyos investigadores residiera en Chile al momento de la publicación. De los metadatos se seleccionaron las variables:
+
+* `ID`: Número identificador del texto.
+* `idioma`: Idioma en el que se publicó el texto.
+* `tipo`: Tipo de texto. Para este análisis se consideraron las categorías de artículo y revisión sistemática.
+* `citations`: Número de veces que se ha citado el texto en otros productos académicos. Considera otras bases de datos académicas, no sólo WOS.
+* `year`: Año de publicación del texto.
+* `abstract`: Abstract completo del texto.
+* `keywords`: Palabras clave escogidas por los autores.
+* `keywords_p`: Palabras clave escogidas por WOS.
+
+```{r fig1, fig.cap="**Tabla 1**: Estadísticos descriptivos de las variables de metadatos. *Fuente*: Elaboración propia."}
+# Numero de textos considerados
+resumen_descr <- wos_data %>% 
+  dplyr::select(idioma, tipo, citations, year)
+print(dfSummary(resumen_descr, 
+                style = "grid", plain.ascii = FALSE, headings = FALSE, varnumbers   = FALSE,
+                valid.col = FALSE, na.col = FALSE), method = 'render')
+```
+
+Como se puede observar en la tabla, casi la totalidad de los textos corresponden a artículos, asimismo, las publicaciones de sociología chilena seleccionadas están publicadas en su mayoría en inglés (64.6%), siendo en una proporción menor publicadas en español (33.4%). Además, se puede constatar que el 50% de las publicaciones tiene dos citas o menos en bases de datos académicas. En cuanto al tiempo, se puede observar una tendencia en los últimos años al aumento de la publicación de sociología en las revistas contempladas en WOS, publicándose la mitad del total de los textos entre 2017 y 2021.
+
+```{r descriptivo tokens}
+# 73802 / 455
+# 162.2022
+```
+
+A partir de las variables de abstract, palabras clave de autor y palabras clave de WOS, se limpió el texto y se dividió en términos ( _tokens_ ), que luego se utilizaron para el análisis automatizado de texto, mediante un _structural topic model_. Para la eliminación de palabras comunes y conectores, se utilizó el paquete _stopwords 2.3_ en RStudio y se seleccionaron otros términos de alta frecuencia en los textos, en un proceso iterativo.
+Tras la limpieza de términos se creó una document-feature matrix, abarcando 455 publicaciones y un promedio de 162.202 tokens por texto.
+
+## Structural Topic Modeling 
+
+El presente análisis identifica 10 temáticas principales en la producción sociológica chilena de alcance internacional, haciendo uso de análisis automatizado de texto, utilizando un _structural topic model_ producido con el paquete _stm 1.3.6_, desarrollado por Roberts, Stewart y Tingley (2014), en RStudio. 
+
+En el _Topic Modeling_ los temas se crean automáticamente y a partir de los datos empíricos, basándose en el recuento de términos, sin importar su orden ni relación con otras palabras —método bag-of-words—. En este sentido, permite el procesamiento de grandes volúmenes de texto, si bien sus resultados requieren interpretación (Chang et al., 2009). El _Structural Topic Modeling_ además incorpora variables la forma en que el texto cambia en función de los metadatos del texto, en tanto covariables (Roberts et al., 2014). 
+
+La definición de un modelo de 10 temáticas responde en primer lugar a la capacidad de procesamiento del equipo con el que se desarrolló este análisis, lo que implicó necesariamente limitar el rango posible de temáticas a 12. En segundo lugar, se utilizó la función _manyTopics_ del paquete _stm_ para entrenar modelos con un número de topics (K) entre 4 y 12. Para cada K del intervalo, el paquete escoge el modelo pareto-dominante en términos de exclusividad (diferenciabilidad) y coherencia (consistencia) (Roberts et al., 2014); para este cálculo se consideran 10 palabras por topic. En tercer lugar, se evaluaron cualitativamente los ocho modelos seleccionados, ponderando principalmente su coherencia e interpretabilidad semántica (Chang et al., 2009).
+
+Tras la selección del modelo definitivo, en respuesta a la primera interrogante de este estudio, se identifica la proporción de cada temática latente en la muestra. Respecto a la segunda pregunta de investigación, se calcularon las covariaciones temáticas en los documentos, generando un gráfico utilizando el algoritmo Fruchterman-Reingold disponible en el paquete _igraph R_. Finalmente, en respuesta a la tercera pregunta de investigación, se exploraron las relaciones entre las proporciones latentes de temáticas y los metadatos observados (publicación, idioma de publicación y citas). 
+ 
 
 # Análisis
 ## Temáticas
-Topic Modeling
+La **figura 1** presenta los 10 temas producidos por el modelo no supervisado, incluyendo los seis principales términos asociados a cada tema, ordenados de mayor a menor prevalencia en en el corpus. 
 
-## Los productores en red
-Construcción y análisis descriptivo de la red
+```{r stm, message=FALSE, warning=FALSE, include=FALSE}
+# 1. Produccion topic model
 
-## Estructura de la comunidad científica y creación de conocimiento social
-Análisis bivariado
+set.seed(02138)
+select_topics <- manyTopics(wos_dfm, K=4:12)
+
+# 1.2. Seleccion del topic model
+four_topics <- select_topics$out[[1]]
+five_topics <- select_topics$out[[2]]
+six_topics <- select_topics$out[[3]]
+seven_topics <- select_topics$out[[4]]
+eight_topics <- select_topics$out[[5]]
+nine_topics <- select_topics$out[[6]]
+ten_topics <- select_topics$out[[7]]
+eleven_topics <- select_topics$out[[8]]
+twelve_topics <- select_topics$out[[9]]
+
+four_beta <- tidy(four_topics) 
+five_beta <- tidy(five_topics) 
+six_beta <- tidy(six_topics) 
+seven_beta <- tidy(seven_topics) 
+eight_beta <- tidy(eight_topics) 
+nine_beta <- tidy(nine_topics) 
+ten_beta <- tidy(ten_topics) 
+eleven_beta <- tidy(eleven_topics) 
+twelve_beta <- tidy(twelve_topics) 
+
+# four_beta %>%
+#  group_by(topic) %>%
+#  top_n(5, beta) %>%
+#  ungroup() %>%
+#  mutate(topic = paste0("Topic ", topic),
+#         term = reorder_within(term, beta, topic)) %>%
+#  ggplot(aes(term, beta, fill = as.factor(topic))) +
+#  geom_col(show.legend = FALSE) +
+#  facet_wrap(~ topic, scales = "free_y") +
+#  coord_flip() +
+#  scale_x_reordered()
+
+# **Modelo de 4 Topics**
+# Coherencia: Internamente los topics no son muy coherentes, incluyen una amplia variedad de temas en su interior (education está en el mismo topic que indigenous y class)
+# Interpretabilidad semántica: Permite poca interpretación
+
+# five_beta %>% 
+#  group_by(topic) %>%
+#  top_n(5, beta) %>%
+#  ungroup() %>%
+#  mutate(topic = paste0("Topic ", topic),
+#         term = reorder_within(term, beta, topic)) %>%
+#  ggplot(aes(term, beta, fill = as.factor(topic))) +
+#  geom_col(show.legend = FALSE) +
+#  facet_wrap(~ topic, scales = "free_y") +
+#  coord_flip() +
+#  scale_x_reordered()
+
+# **Modelo de 5 Topics**
+# Coherencia: Internamente los topics tienen mayor coherencia, sin embargo existen cateogrías que parecieran sobrelaparse (Topic 4 incluye mapuche y Topic 5 incluye indigenous)
+# Interpretabilidad semántica: Cada Topic cubre un espectro muy amplio
+
+# six_beta %>%
+#  group_by(topic) %>%
+#  top_n(5, beta) %>%
+#  ungroup() %>%
+#  mutate(topic = paste0("Topic ", topic),
+#         term = reorder_within(term, beta, topic)) %>%
+#  ggplot(aes(term, beta, fill = as.factor(topic))) +
+#  geom_col(show.legend = FALSE) +
+#  facet_wrap(~ topic, scales = "free_y") +
+#  coord_flip() +
+#  scale_x_reordered()
+
+# **Modelo de 6 Topics**
+# Coherencia: Los Topics tienen mayor coherencia interna
+# Interpretabilidad semántica: Sin embargo son muy amplios, cada uno abarca términos asociados al menos a dos líneas de investigación más o menos definidas
+
+# seven_beta %>%
+#  group_by(topic) %>%
+#  top_n(5, beta) %>%
+#  ungroup() %>%
+#  mutate(topic = paste0("Topic ", topic),
+#         term = reorder_within(term, beta, topic)) %>%
+#  ggplot(aes(term, beta, fill = as.factor(topic))) +
+#  geom_col(show.legend = FALSE) +
+#  facet_wrap(~ topic, scales = "free_y") +
+#  coord_flip() +
+#  scale_x_reordered()
+
+# **Modelo de 7 Topics**
+# Coherencia: Coherencia: Internamente los topics no son muy coherentes, incluyen una amplia variedad de temáticas en su interior (inequality-income-religion en el Topic 1, school-indigenous-households en el Topic 5, entre otros)
+# Interpretabilidad semántica: No permite mucha interpretabilidad
+
+# eight_beta %>%
+#  group_by(topic) %>%
+#  top_n(5, beta) %>%
+#  ungroup() %>%
+#  mutate(topic = paste0("Topic ", topic),
+#         term = reorder_within(term, beta, topic)) %>%
+#  ggplot(aes(term, beta, fill = as.factor(topic))) +
+#  geom_col(show.legend = FALSE) +
+#  facet_wrap(~ topic, scales = "free_y") +
+#  coord_flip() +
+#  scale_x_reordered()
+
+# **Modelo de 8 Topics**
+# Coherencia: Mayor coherencia que en modelos previos. 
+# Interpretabilidad semántica: Permite identificar líneas centrales en cada Topic (ej: education-school-educational-chilean-chile en Topic 6 y violence-women-gender-care-chile en Topic 7)
+
+# nine_beta %>%
+#  group_by(topic) %>%
+#  top_n(5, beta) %>%
+#  ungroup() %>%
+#  mutate(topic = paste0("Topic ", topic),
+#         term = reorder_within(term, beta, topic)) %>%
+#  ggplot(aes(term, beta, fill = as.factor(topic))) +
+#  geom_col(show.legend = FALSE) +
+#  facet_wrap(~ topic, scales = "free_y") +
+#  coord_flip() +
+#  scale_x_reordered()
+
+# **Modelo de 9 Topics**
+# Coherencia: Algunos topics tienen mayor coherencia que otros. (Ej: incoherencia en Topic 2 y Topic 4)
+# Interpretabilidad semántica: Difícil de analizar, términos cercanos se agrupan en diferentes Topics (indigenous en 2 y mapuche en 6)
+
+# ten_beta %>%
+#  group_by(topic) %>%
+#  top_n(5, beta) %>%
+#  ungroup() %>%
+#  mutate(topic = paste0("Topic ", topic),
+#         term = reorder_within(term, beta, topic)) %>%
+#  ggplot(aes(term, beta, fill = as.factor(topic))) +
+#  geom_col(show.legend = FALSE) +
+#  facet_wrap(~ topic, scales = "free_y") +
+#  coord_flip() +
+#  scale_x_reordered()
+
+# **Modelo de 10 Topics**
+# Coherencia:  La mayoría de los modelos tiene mayor coherencia interna, excepto el Topic 8 (violence-energy-support-water-status)
+# Interpretabilidad semántica: El Topic 10 se configura como misceláneo de sociología sobre Chile, términos poco sustantivos. 
+
+# eleven_beta %>%
+#  group_by(topic) %>%
+#  top_n(5, beta) %>%
+#  ungroup() %>%
+#  mutate(topic = paste0("Topic ", topic),
+#         term = reorder_within(term, beta, topic)) %>%
+#  ggplot(aes(term, beta, fill = as.factor(topic))) +
+#  geom_col(show.legend = FALSE) +
+#  facet_wrap(~ topic, scales = "free_y") +
+#  coord_flip() +
+#  scale_x_reordered()
+
+# **Modelo de 11 Topics**
+# Coherencia: Mayor coherencia interna en los Topics. 
+# Interpretabilidad semántica: Buena interpretabilidad, excepto por la amplitud del Topic 2 (public-energy-chile-time-advertising) y los términos poco sutantivos del Topic 6 (theoretical-model-trust-factor-people)
+
+# twelve_beta %>%
+#  group_by(topic) %>%
+#  top_n(5, beta) %>%
+#  ungroup() %>%
+#  mutate(topic = paste0("Topic ", topic),
+#         term = reorder_within(term, beta, topic)) %>%
+#  ggplot(aes(term, beta, fill = as.factor(topic))) +
+#  geom_col(show.legend = FALSE) +
+#  facet_wrap(~ topic, scales = "free_y") +
+#  coord_flip() +
+#  scale_x_reordered()
+
+# **Modelo de 12 Topics**
+# Coherencia: Coherencia interna en la mayoría de los Topics. 
+# Interpretabilidad semántica: Mayor interpretabilidad en la mayoría de los tomas, sin embargo quedan Topics más difíciles de catalogar (Topic 7, knowledge-latin-chile-environmental-time)
+
+
+# 2. Calculo dataframe de beta y gamma
+# **Se escoge el modelo ten_topics **
+# Por criterios de coherencia e interpretabilidad. A continuacion se identifica la proporcion de cada Topic en la muestra.
+
+ten_beta <- tidy(ten_topics) 
+
+top_terms <- ten_beta %>%
+  arrange(beta) %>%
+  group_by(topic) %>%
+  top_n(6, beta) %>%
+  arrange(-beta) %>%
+  select(topic, term) %>%
+  summarise(terms = list(term)) %>%
+  mutate(terms = map(terms, paste, collapse = ", ")) %>% 
+  unnest()
+
+ten_gamma <- tidy(ten_topics, matrix = "gamma",
+                 document_names = rownames(wos_tokens$ID))
+
+gamma_terms <- ten_gamma %>%
+  group_by(topic) %>%
+  summarise(gamma = mean(gamma)) %>%
+  arrange(desc(gamma)) %>%
+  left_join(top_terms, by = "topic") %>%
+  mutate(topic = paste0("Topic ", topic),
+         topic = reorder(topic, gamma))
+
+```
+
+```{r fig2, fig.cap="**Figura 1**: Las diez temáticas con mayor prevalencia en la muestra. El eje de abscisas señala la proporción de cada tema en el conjunto del corpus. Incluye los principales términos que contribuyen a cada temática. *Fuente*: Elaboración propia."}
+
+quartz()
+gamma_terms %>%
+  top_n(10, gamma) %>%
+  ggplot(aes(topic, gamma, label = terms, fill = topic)) +
+  geom_col(show.legend = FALSE) +
+  geom_text(hjust = 0.85, nudge_y = 0.0005, size = 3) +
+  coord_flip() +
+  theme_hc() +
+  theme(plot.title = element_text(size = 14)) +
+  labs(x = NULL, y = expression(gamma))
+
+```
+En este modelo, el Topic 7, que abarca clases sociales, políticas públicas y gestión en Chile, es la temática más prevalente en el corpus, representando casi un 13.28% de la presencia temática en todos los abstract y palabras clave. 
+
+
+## Relación entre las temáticas
+Se puede examinar cómo las temáticas se correlacionan entre sí a través de la co-ocurrencia de temáticas a nivel de texto. Esto permite explorar la probabilidad de que un solo documento discuta un determinado conjunto de temas. Estas correlaciones se exploran de forma gráfica en la **Figura 2**. Se puede observar la falta de nexos entre los nodos temáticos, esto implica que las correlaciones entre temáticas son menores a 0.01 en todos los casos. Esto implica el hecho de que los abstract y palabras clave de los artículos tienden a utilizar un lenguaje que no se utiliza habitualmente en los artículos de las otras temáticas. 
+En cuanto a la distancia entre los nodos, se puede apreciar que si bien algunos tópicos se acercan en cierto grado (Topic 1, Topic 7 y Topic 2), no es posible identificar agrupación en clusters. 
+
+```{r fig3, fig.cap="**Figura 2**: Nexos señalan una correlación mayor a 0.01. El tamaño del nodo refleja la proporción de temas a nivel de corpus. *Fuente*: Elaboración propia."}
+
+topicCorr <- topicCorr(ten_topics, method = "simple", cutoff = 0.01)
+plot(
+  topicCorr,
+  vertex.color = "pink",
+  vertex.label.cex = 0.75,
+  vertex.label.color = "black",
+  vertex.size = 500 * (gamma_terms$gamma))
+
+```
+
+
+## Efectos de otras variables en las temáticas
+
+```{r year-cite-lang}
+efecto_year <-
+  estimateEffect(
+    1:10 ~ year,
+    ten_topics,
+    wos_tokens %>% distinct(ID, year) %>% arrange(ID))
+# tidy(efecto_year)
+# no se observan diferencias estadisticamente significativas por ano en ningun topic (CI 0.95)
+
+efecto_cite <-
+  estimateEffect(
+    1:10 ~ citations,
+    ten_topics,
+    wos_tokens %>% distinct(ID, citations) %>% arrange(ID))
+# tidy(efecto_cite)
+# no se observan diferencias estadisticamente significativas por cantidad de citas promedio en ningun topic (CI 0.95)
+
+efecto_lang <-
+  estimateEffect(
+    1:10 ~ idioma,
+    ten_topics,
+    wos_tokens %>% distinct(ID, idioma) %>% arrange(ID))
+# tidy(efecto_lang)
+# no se observan diferencias estadisticamente significativas por idioma de la publicacion en ningun topic (CI 0.95)
+```
+
+Además de la prevalencia de los tópicos y la correlación entre ellos, se evaluó la asociación de las temáticas al año de publicación, la cantidad de citas y el idioma de publicación de los textos. En ninguno de los casos estimados se puede probar la predictividad, ya que a pesar de tener variaciones observables en los beta de regresión, no se puede afirmar que sean estadísticamente significativas con un 95% de confianza. 
 
 # Discusión
-Cómo se responde la pregunta 
-Futuras interrogantes
+
+A partir del structural topic model producido en esta investigación, se identificaron 10 temáticas presentes en la producción sociológica chilena de alcance internacional, entre 2001 y 2021. Entre estas temáticas se pudo identificar una mayor prevalencia de ciertos tópicos en el corpus, si bien no se pudo identificar correlación entre dichos tópicos ni su correlación con otras variables explicativas.
+Respecto a la falta de relación entre temáticas (Figura 2), se abre la duda respecto a la cantidad de temáticas consideradas en el modelos, pudiendo efectivamente ser cada Topic un cluster de temáticas de investigación más específicas y con mayor coherencia interna. Esta posibilidad es aún más llamativa considerando la falta de cohesión temática en las temáticas de mayor prevalencia (Figura 1)
+En esta línea, se identifica la posibilidad de estimar nuevamente un structural topic model, con una mayor cantidad de tópicos (K), que permita describir con mayor precisión las tendencias de producción sociológica chilena, así como explorar su dimensionalidad.
 
 
 # Referencias
