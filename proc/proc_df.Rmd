@@ -1,0 +1,91 @@
+---
+title: "Procesamiento de datos"
+author: "Carolina Carrillo"
+date: "14/12/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Paquetes y set-ups
+Se utilizan x y x
+
+```{r paquetes y set-ups}
+# 1. Cargar librerias
+# install.packages("pacman")
+library(pacman)
+p_load(readxl, dplyr, tibble, tidytext)
+```
+
+Se descargan los datos en formato X, a partir del search engine de WoS
+
+```{r datos}
+# 1. Descarga datos
+wos_original <- read_excel("../input/data/resultados_wos.xls")
+# 2. Seleccion y etiquetamiento de variables
+wos_select <- wos_original %>% 
+  dplyr::select(autores = `Author Full Names`,
+                titulo = `Article Title`, 
+                revista = `Source Title`, 
+                idioma = Language,
+                tipo = `Document Type`,
+                keywords = `Author Keywords`,
+                keywords_p = `Keywords Plus`,
+                abstract = Abstract,
+                origen = Addresses,
+                year = `Publication Year`)
+# 3. Filtro de estudio empirico, teorico o revision sistematica
+wos_data <- wos_select %>% dplyr::filter(tipo !="Editorial Material" 
+                                         & tipo !="Correction" 
+                                         & tipo !="Book Review"
+                                         & tipo !="Biographical-Item"
+                                         & tipo !="Book Review; Early Access")
+# 4. Identificador de paper
+wos_data <- tibble::rowid_to_column(wos_data, "ID")
+
+```
+
+## Producción de df para análisis
+Se tokeniza el texto correspondiente al abstract (a), palabras clave del autor (b) y palabras clave de la revista (c).
+Se filtran palabras comunes y conectores en inglés, así como palabras de menos de tres letras. Se eliminan palabras comunes en los abstract que no aportan a diferenciar temáticas. 
+
+```{r tokenizar}
+tokens_a <- wos_data %>%
+  unnest_tokens(words, abstract) %>%
+  filter(!words %in% stopwords::stopwords("en", "stopwords-iso"))
+tokens_a$words <- removeWords(tokens_a$words, c("social", "article", "analysis", "study", "variables", "studies", "paper"))
+
+tokens_b <- wos_data %>%
+  unnest_tokens(words, keywords) %>%
+  filter(!words %in% stopwords::stopwords("en", "stopwords-iso"))
+tokens_b$words <- removeWords(tokens_b$words, c("social", "article", "analysis", "study", "variables", "studies", "paper"))
+
+tokens_c <- wos_data %>%
+  unnest_tokens(words, keywords_p) %>%
+  filter(!words %in% stopwords::stopwords("en", "stopwords-iso"))
+tokens_c$words <- removeWords(tokens_c$words, c("social", "article", "analysis", "study", "variables", "studies", "paper"))
+
+wos_tokens <- bind_rows(list(tokens_a, tokens_b, tokens_c), list(tokens_a, tokens_b, tokens_c))
+```
+
+Se procede a limpiar el dataframe, eliminando columnas utilizadas para construir la variable words, espacios en blanco, NA y otras palabras que no aportan a la identificación sustantiva de temáticas.
+
+```{r limpiar tokens}
+wos_tokens <- wos_tokens %>% dplyr::select(-abstract, -keywords, -keywords_p)
+wos_tokens %>% count(words, sort = TRUE)
+# se repite 300 veces "based", siendo que no aporta riqueza semantica
+wos_tokens <- wos_tokens[wos_tokens$words != "based", ]
+wos_tokens <- wos_tokens[wos_tokens$words != "", ]
+wos_tokens <- na.omit(wos_tokens)
+wos_tokens %>% count(words, sort = TRUE)
+```
+
+
+### Ajustes finales y descargar BBDD
+Se guarda el dataframe como RData, para ser usado en el análisis temático exploratorio ( _explor_stm.Rmd_ ).
+```{r descargar BBDD}
+saveRDS(wos_tokens, "../input/data/wos_tokens.RData")
+```
+

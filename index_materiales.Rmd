@@ -1,0 +1,42 @@
+---
+title: "Index materiales"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(include = TRUE, echo = TRUE)
+```
+
+## Web scrapping con rvest
+Ejemplo en el GoogleColab [rvest_1.pynb](https://colab.research.google.com/drive/1s53lhBalLzvHWYp797M48TPrGntLKxnn?usp=sharing#scrollTo=iPO1AB3BXe9e) 
+
+```{r}
+dfSummary(resumen_descr, style = "grid", plain.ascii = FALSE)
+```
+
+
+Funciones:
+
+* read_html() para descargar el html
+* html_nodes() para seleccionar nodos
+* html_text() para extraer el texto dentro de los nodos
+* html_attr() para extraer algún atributo del nodo
+* html_table() para extraer tablas
+
+### rvest + tidy + tm
+Ejemplo en GoogleColab [rvest_2.ipynb](https://colab.research.google.com/drive/1h_f5yWb_OKfwMxkJg8Zy_jGkJ01vzZEL?usp=sharing). Además de extraer y manipular html, con tidy y tm se manipulan tablas y texto.
+
+### Plus: ejercicio de [CSS](https://flukeout.github.io/)
+
+## Análisis automatizado de texto
+Para avanzar en el procesamiento de lenguaje natural, pueden ser útiles las herramientas de regex (identificación de texto a partir de expresiones regulares) y structural topic modelling (allows researchers to discover topics and estimate their relationship to document metadata).
+### Materiales
+
+* Ejemplo regex en GoogleColab ([regex.pynb](https://colab.research.google.com/drive/1NLHUIR-kckn86FQua5tTVQstoW_dL16W?usp=sharing))
+* Tutorial regex ([link](https://medium.com/factory-mind/regex-tutorial-a-simple-cheatsheet-by-examples-649dc1c3f285))
+* Ejemplo stm en GoogleColab ([topic_model.pynb](https://colab.research.google.com/drive/1KRbywEgxORqc4P2uvaOjqMqsNtUX5jD4?usp=sharing))
+* Tutorial quanteda ([link](https://tutorials.quanteda.io/))
+* Paquete de stm en R ([link](https://cran.r-project.org/web/packages/stm/vignettes/stmVignette.pdf))
+* Paper en AJPS: Structural Topic Models for Open-Ended Survey Responses
+ (https://doi.org/10.1111/ajps.12103)
+

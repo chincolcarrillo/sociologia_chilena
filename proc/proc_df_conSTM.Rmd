@@ -1,0 +1,105 @@
+---
+title: "Procesamiento de datos"
+author: "Carolina Carrillo"
+date: "14/12/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Paquetes y set-ups
+Se utilizan x y x
+
+```{r paquetes y set-ups}
+# 1. Cargar librerias
+# install.packages("pacman")
+library(pacman)
+p_load(readxl, dplyr, tibble, tidytext, quanteda, tm, stm, reshape2, ggplot2)
+```
+
+Se descargan los datos en formato X, a partir del search engine de WoS
+
+```{r datos}
+wos_original <- read_excel("../input/data/resultados_wos.xls")
+wos_select <- wos_original %>% 
+  dplyr::select(autores = `Author Full Names`,
+                titulo = `Article Title`, 
+                revista = `Source Title`, 
+                idioma = Language,
+                tipo = `Document Type`,
+                keywords = `Author Keywords`,
+                keywords_p = `Keywords Plus`,
+                abstract = Abstract,
+                origen = Addresses,
+                year = `Publication Year`)
+wos_data <- wos_select %>% dplyr::filter(tipo !="Editorial Material" 
+                                         & tipo !="Correction" 
+                                         & tipo !="Book Review"
+                                         & tipo !="Biographical-Item"
+                                         & tipo !="Book Review; Early Access")
+wos_data <- tibble::rowid_to_column(wos_data, "ID")
+```
+
+## Producción de df para primera etapa de análisis (temático)
+### 
+```{r tokenizar}
+tokens_a <- wos_data %>%
+  unnest_tokens(words, abstract) %>%
+  filter(!words %in% stopwords::stopwords("en", "stopwords-iso"))
+tokens_a$words <- removeWords(tokens_a$words, c("social", "article", "analysis", "study"))
+
+tokens_b <- wos_data %>%
+  unnest_tokens(words, keywords) %>%
+  filter(!words %in% stopwords::stopwords("en", "stopwords-iso"))
+tokens_b$words <- removeWords(tokens_b$words, c("social", "article", "analysis", "study"))
+
+tokens_c <- wos_data %>%
+  unnest_tokens(words, keywords_p) %>%
+  filter(!words %in% stopwords::stopwords("en", "stopwords-iso"))
+tokens_c$words <- removeWords(tokens_c$words, c("social", "article", "analysis", "study", "variables", "studies"))
+
+wos_tokens <- bind_rows(list(tokens_a, tokens_b, tokens_c), list(tokens_a, tokens_b, tokens_c))
+
+wos_tokens <- wos_tokens %>% dplyr::select(-abstract, -keywords, -keywords_p)
+wos_tokens <- wos_tokens[wos_tokens$words != "", ]
+wos_tokens <- na.omit(wos_tokens)
+
+wos_dfm <- wos_tokens %>%
+  count(ID, words, sort = TRUE) %>%
+  cast_dfm(ID, words, n)
+wos_dfm
+
+
+
+topic_model <- stm(wos_dfm, K = 9)
+
+options(repr.plot.width = 30, repr.plot.height = 15, repr.plot.res = 100, warn=-1)
+td_beta <- tidy(topic_model)
+
+td_beta %>%
+  group_by(topic) %>%
+  top_n(5, beta) %>%
+  ungroup() %>%
+  mutate(topic = paste0("Topic ", topic),
+         term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = as.factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free_y") +
+  coord_flip() +
+  scale_x_reordered()
+
+
+```
+
+
+### Ajustes finales y descargar BBDD
+```{r descargar BBDD}
+
+```
+
+
+## Producción de graph para segunda etapa de análisis (redes)
+
+
