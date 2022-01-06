@@ -1,0 +1,279 @@
+---
+title: "explor_stm"
+author: "Carolina Carrillo"
+date: "14/12/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Paquetes y set-ups
+Se utilizan x y x
+
+```{r paquetes y set-ups}
+# 1. Cargar librerias
+# install.packages("pacman")
+library(pacman)
+p_load(dplyr, tidyverse, tidytext, quanteda, tm, stm, reshape2, ggplot2, ggthemes)
+```
+
+Se descargan los datos en formato RData, a partir del procesamiento realizado en el documento _proc_df.Rmd_ 
+
+```{r token data}
+# 1. Descarga datos
+wos_tokens <- readRDS("../input/data/wos_tokens.RData")
+# 2. Armar document-feature-matrix
+wos_dfm <- wos_tokens %>%
+  count(ID, words, sort = TRUE) %>%
+  cast_dfm(ID, words, n)
+wos_dfm
+```
+
+## Elección del modelo
+
+Se exploran los posibles topic models. Se utiliza la función _manyTopics_ del paquete _stm_ para entrenar modelos con un número de topics (K) entre 3 y 12. Para cada K del intervalo, se elige el modelo pareto dominante en términos de exclusividad y coherencia semántica. Para este cálculo se consideran 10 palabras por topic.
+
+```{r modelos posibles, message=FALSE, warning=FALSE}
+set.seed(02138)
+select_topics <- manyTopics(wos_dfm, K=4:12)
+
+
+```
+
+Se procede a graficar los 9 modelos seleccionados, para revisar en última instancia su interpretabilidad semántica.
+
+```{r beta modelos}
+four_topics <- select_topics$out[[1]]
+five_topics <- select_topics$out[[2]]
+six_topics <- select_topics$out[[3]]
+seven_topics <- select_topics$out[[4]]
+eight_topics <- select_topics$out[[5]]
+nine_topics <- select_topics$out[[6]]
+ten_topics <- select_topics$out[[7]]
+eleven_topics <- select_topics$out[[8]]
+twelve_topics <- select_topics$out[[9]]
+
+four_beta <- tidy(four_topics) 
+five_beta <- tidy(five_topics) 
+six_beta <- tidy(six_topics) 
+seven_beta <- tidy(seven_topics) 
+eight_beta <- tidy(eight_topics) 
+nine_beta <- tidy(nine_topics) 
+ten_beta <- tidy(ten_topics) 
+eleven_beta <- tidy(eleven_topics) 
+twelve_beta <- tidy(twelve_topics) 
+
+four_beta %>%
+  group_by(topic) %>%
+  top_n(5, beta) %>%
+  ungroup() %>%
+  mutate(topic = paste0("Topic ", topic),
+         term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = as.factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free_y") +
+  coord_flip() +
+  scale_x_reordered()
+```
+**Modelo de 4 Topics**
+Coherencia: Internamente los topics no son muy coherentes, incluyen una amplia variedad de temas en su interior (education está en el mismo topic que indigenous y class)
+Interpretabilidad semántica: Permite poca interpretación
+
+```{r}
+five_beta %>%
+  group_by(topic) %>%
+  top_n(5, beta) %>%
+  ungroup() %>%
+  mutate(topic = paste0("Topic ", topic),
+         term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = as.factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free_y") +
+  coord_flip() +
+  scale_x_reordered()
+
+````
+
+**Modelo de 5 Topics**
+Coherencia: Internamente los topics tienen mayor coherencia, sin embargo existen cateogrías que parecieran sobrelaparse (Topic 4 incluye mapuche y Topic 5 incluye indigenous)
+Interpretabilidad semántica: Cada Topic cubre un espectro muy amplio
+
+
+```{r}
+six_beta %>%
+  group_by(topic) %>%
+  top_n(5, beta) %>%
+  ungroup() %>%
+  mutate(topic = paste0("Topic ", topic),
+         term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = as.factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free_y") +
+  coord_flip() +
+  scale_x_reordered()
+
+````
+
+**Modelo de 6 Topics**
+Coherencia: Los Topics tienen mayor coherencia interna
+Interpretabilidad semántica: Sin embargo son muy amplios, cada uno abarca términos asociados al menos a dos líneas de investigación más o menos definidas
+
+
+```{r}
+seven_beta %>%
+  group_by(topic) %>%
+  top_n(5, beta) %>%
+  ungroup() %>%
+  mutate(topic = paste0("Topic ", topic),
+         term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = as.factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free_y") +
+  coord_flip() +
+  scale_x_reordered()
+
+````
+
+**Modelo de 7 Topics**
+Coherencia: Coherencia: Internamente los topics no son muy coherentes, incluyen una amplia variedad de temáticas en su interior (inequality-income-religion en el Topic 1, school-indigenous-households en el Topic 5, entre otros)
+Interpretabilidad semántica: No permite mucha interpretabilidad
+
+
+```{r}
+eight_beta %>%
+  group_by(topic) %>%
+  top_n(5, beta) %>%
+  ungroup() %>%
+  mutate(topic = paste0("Topic ", topic),
+         term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = as.factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free_y") +
+  coord_flip() +
+  scale_x_reordered()
+
+````
+
+**Modelo de 8 Topics**
+Coherencia: Mayor coherencia que en modelos previos. 
+Interpretabilidad semántica: Permite identificar líneas centrales en cada Topic (ej: education-school-educational-chilean-chile en Topic 6 y violence-women-gender-care-chile en Topic 7)
+
+
+```{r}
+nine_beta %>%
+  group_by(topic) %>%
+  top_n(5, beta) %>%
+  ungroup() %>%
+  mutate(topic = paste0("Topic ", topic),
+         term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = as.factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free_y") +
+  coord_flip() +
+  scale_x_reordered()
+
+````
+
+**Modelo de 9 Topics**
+Coherencia: Algunos topics tienen mayor coherencia que otros. (Ej: incoherencia en Topic 2 y Topic 4)
+Interpretabilidad semántica: Difícil de analizar, términos cercanos se agrupan en diferentes Topics (indigenous en 2 y mapuche en 6)
+
+
+```{r}
+ten_beta %>%
+  group_by(topic) %>%
+  top_n(5, beta) %>%
+  ungroup() %>%
+  mutate(topic = paste0("Topic ", topic),
+         term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = as.factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free_y") +
+  coord_flip() +
+  scale_x_reordered()
+
+````
+
+**Modelo de 10 Topics**
+Coherencia:  La mayoría de los modelos tiene mayor coherencia interna, excepto el Topic 8 (violence-energy-support-water-status)
+Interpretabilidad semántica: El Topic 10 se configura como misceláneo de sociología sobre Chile, términos poco sustantivos. 
+
+
+```{r}
+eleven_beta %>%
+  group_by(topic) %>%
+  top_n(5, beta) %>%
+  ungroup() %>%
+  mutate(topic = paste0("Topic ", topic),
+         term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = as.factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free_y") +
+  coord_flip() +
+  scale_x_reordered()
+
+````
+
+**Modelo de 11 Topics**
+Coherencia: Mayor coherencia interna en los Topics. 
+Interpretabilidad semántica: Buena interpretabilidad, excepto por la amplitud del Topic 2 (public-energy-chile-time-advertising) y los términos poco sutantivos del Topic 6 (theoretical-model-trust-factor-people)
+
+
+```{r}
+twelve_beta %>%
+  group_by(topic) %>%
+  top_n(5, beta) %>%
+  ungroup() %>%
+  mutate(topic = paste0("Topic ", topic),
+         term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = as.factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free_y") +
+  coord_flip() +
+  scale_x_reordered()
+
+````
+
+**Modelo de 12 Topics**
+Coherencia: Coherencia interna en la mayoría de los Topics. 
+Interpretabilidad semántica: Mayor interpretabilidad en la mayoría de los tomas, sin embargo quedan Topics más difíciles de catalogar (Topic 7, knowledge-latin-chile-environmental-time)
+
+
+## Exploración del modelo
+
+**Se escoge el modelo _ten_topics_ **
+Por criterios de coherencia e interpretabilidad. A continuación se identifica la proporción de cada Topic en la muestra.
+
+```{r proporcion}
+
+top_terms <- ten_beta %>%
+  arrange(beta) %>%
+  group_by(topic) %>%
+  top_n(7, beta) %>%
+  arrange(-beta) %>%
+  select(topic, term) %>%
+  summarise(terms = list(term)) %>%
+  mutate(terms = map(terms, paste, collapse = ", ")) %>% 
+  unnest()
+
+ten_gamma <- tidy(ten_topics, matrix = "gamma",
+                 document_names = rownames(wos_tokens$ID))
+
+gamma_terms <- ten_gamma %>%
+  group_by(topic) %>%
+  summarise(gamma = mean(gamma)) %>%
+  arrange(desc(gamma)) %>%
+  left_join(top_terms, by = "topic") %>%
+  mutate(topic = paste0("Topic ", topic),
+         topic = reorder(topic, gamma))
+
+
+
+```
+
+Topics 7, 6, 10 y 4 cubren sobre el 46% de los documentos.
+
+
+

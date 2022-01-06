@@ -16,15 +16,13 @@ Se utilizan x y x
 # 1. Cargar librerias
 # install.packages("pacman")
 library(pacman)
-p_load(readxl, dplyr, tibble, tidytext)
+p_load(readxl, dplyr, tibble, tidytext, quanteda, tm, stm, reshape2, ggplot2)
 ```
 
 Se descargan los datos en formato X, a partir del search engine de WoS
 
 ```{r datos}
-# 1. Descarga datos
 wos_original <- read_excel("../input/data/resultados_wos.xls")
-# 2. Seleccion y etiquetamiento de variables
 wos_select <- wos_original %>% 
   dplyr::select(autores = `Author Full Names`,
                 titulo = `Article Title`, 
@@ -36,56 +34,72 @@ wos_select <- wos_original %>%
                 abstract = Abstract,
                 origen = Addresses,
                 year = `Publication Year`)
-# 3. Filtro de estudio empirico, teorico o revision sistematica
 wos_data <- wos_select %>% dplyr::filter(tipo !="Editorial Material" 
                                          & tipo !="Correction" 
                                          & tipo !="Book Review"
                                          & tipo !="Biographical-Item"
                                          & tipo !="Book Review; Early Access")
-# 4. Identificador de paper
 wos_data <- tibble::rowid_to_column(wos_data, "ID")
-
 ```
 
-## Producción de df para análisis
-Se tokeniza el texto correspondiente al abstract (a), palabras clave del autor (b) y palabras clave de la revista (c).
-Se filtran palabras comunes y conectores en inglés, así como palabras de menos de tres letras. Se eliminan palabras comunes en los abstract que no aportan a diferenciar temáticas. 
-
+## Producción de df para primera etapa de análisis (temático)
+### 
 ```{r tokenizar}
 tokens_a <- wos_data %>%
   unnest_tokens(words, abstract) %>%
   filter(!words %in% stopwords::stopwords("en", "stopwords-iso"))
-tokens_a$words <- removeWords(tokens_a$words, c("social", "article", "analysis", "study", "variables", "studies", "paper"))
+tokens_a$words <- removeWords(tokens_a$words, c("social", "article", "analysis", "study"))
 
 tokens_b <- wos_data %>%
   unnest_tokens(words, keywords) %>%
   filter(!words %in% stopwords::stopwords("en", "stopwords-iso"))
-tokens_b$words <- removeWords(tokens_b$words, c("social", "article", "analysis", "study", "variables", "studies", "paper"))
+tokens_b$words <- removeWords(tokens_b$words, c("social", "article", "analysis", "study"))
 
 tokens_c <- wos_data %>%
   unnest_tokens(words, keywords_p) %>%
   filter(!words %in% stopwords::stopwords("en", "stopwords-iso"))
-tokens_c$words <- removeWords(tokens_c$words, c("social", "article", "analysis", "study", "variables", "studies", "paper"))
+tokens_c$words <- removeWords(tokens_c$words, c("social", "article", "analysis", "study", "variables", "studies"))
 
 wos_tokens <- bind_rows(list(tokens_a, tokens_b, tokens_c), list(tokens_a, tokens_b, tokens_c))
-```
 
-Se procede a limpiar el dataframe, eliminando columnas utilizadas para construir la variable words, espacios en blanco, NA y otras palabras que no aportan a la identificación sustantiva de temáticas.
-
-```{r limpiar tokens}
 wos_tokens <- wos_tokens %>% dplyr::select(-abstract, -keywords, -keywords_p)
-wos_tokens %>% count(words, sort = TRUE)
-# se repite 300 veces "based", siendo que no aporta riqueza semantica
-wos_tokens <- wos_tokens[wos_tokens$words != "based", ]
 wos_tokens <- wos_tokens[wos_tokens$words != "", ]
 wos_tokens <- na.omit(wos_tokens)
-wos_tokens %>% count(words, sort = TRUE)
+
+wos_dfm <- wos_tokens %>%
+  count(ID, words, sort = TRUE) %>%
+  cast_dfm(ID, words, n)
+wos_dfm
+
+
+
+topic_model <- stm(wos_dfm, K = 9)
+
+options(repr.plot.width = 30, repr.plot.height = 15, repr.plot.res = 100, warn=-1)
+td_beta <- tidy(topic_model)
+
+td_beta %>%
+  group_by(topic) %>%
+  top_n(5, beta) %>%
+  ungroup() %>%
+  mutate(topic = paste0("Topic ", topic),
+         term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = as.factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free_y") +
+  coord_flip() +
+  scale_x_reordered()
+
+
 ```
 
 
 ### Ajustes finales y descargar BBDD
-Se guarda el dataframe como RData, para ser usado en el análisis temático exploratorio ( _explor_stm.Rmd_ ).
 ```{r descargar BBDD}
-saveRDS(wos_tokens, "../input/data/wos_tokens.RData")
+
 ```
+
+
+## Producción de graph para segunda etapa de análisis (redes)
+
 
