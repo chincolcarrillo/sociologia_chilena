@@ -2,10 +2,17 @@
 title:  | 
  ![](input/images/logo_facso.png){width=1.5in}  
  
+<<<<<<< HEAD
  La sociología chilena entre 2000-2021 en Web of Science: un análisis computacional de texto
   
 subtitle: "Ciencias Sociales Computacionales 2021, Facultad de Ciencias Sociales de la Universidad de Chile"
 author: "Carolina Carrillo Devia"
+=======
+ Conocimiento indexado: Un análisis de la producción sociológica chilena del siglo XXI disponible en Web of Science
+  
+subtitle: "Ciencias Sociales Computacionales 2021, Facultad de Ciencias Sociales de la Universidad de Chile"
+author: "Carolina Carrillo"
+>>>>>>> d75c2e678812f2d3a02c33066966c5303a24006f
 date: "`r format(Sys.time(), '%d/%m/%Y')`"
 output: 
   html_document:
@@ -20,6 +27,7 @@ nocite: '@*'
 ---
 
 ```{r setup, include=FALSE}
+<<<<<<< HEAD
 knitr::opts_chunk$set(
 	echo = TRUE,
 	message = FALSE,
@@ -439,6 +447,51 @@ Además de la prevalencia de los tópicos y la correlación entre ellos, se eval
 A partir del structural topic model producido en esta investigación, se identificaron 10 temáticas presentes en la producción sociológica chilena de alcance internacional, entre 2001 y 2021. Entre estas temáticas se pudo identificar una mayor prevalencia de ciertos tópicos en el corpus, si bien no se pudo identificar correlación entre dichos tópicos ni su correlación con otras variables explicativas.
 Respecto a la falta de relación entre temáticas (Figura 2), se abre la duda respecto a la cantidad de temáticas consideradas en el modelos, pudiendo efectivamente ser cada Topic un cluster de temáticas de investigación más específicas y con mayor coherencia interna. Esta posibilidad es aún más llamativa considerando la falta de cohesión temática en las temáticas de mayor prevalencia (Figura 1)
 En esta línea, se identifica la posibilidad de estimar nuevamente un structural topic model, con una mayor cantidad de tópicos (K), que permita describir con mayor precisión las tendencias de producción sociológica chilena, así como explorar su dimensionalidad.
+=======
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+# Introducción
+
+Producción chilena de ciencias sociales (breve introducción histórica)
+Marco de producción actual (Universidades, ANID, centros de estudio, etc)
+Apertura de la ciencia y la inversión pública VS Producción mercantil del conocimiento
+Fenómenos de exclusión temática e institucional de investigadores/investigaciones
+Interés de describir las temáticas priorizadas los últimos veinte años (Topic Modelling de los abstract), y las redes de estos investigadores (redes de producción (x1=institución asociada, x2=país, W=coautoría))
+
+WoS como plataforma que nos permite acceder al conocimiento indexado
+Estatus del SSCI
+Selección de filtros (indexadas bajo Sociología, que uno de los investigadores residiera en Chile, desde el 2000)
+
+## Pregunta de investigación
+
+A partir de lo presentado anteriormente, y considerando la falta de investigación actual respecto a la temática, es de interés explorar ¿cómo se despliegan los discursos de campaña en redes sociales, en Tweets que mencionan a les candidates presidenciales en Chile entre el 15 y el 20 de noviembre de 2021?
+
+En esta línea, se propone analizar con fines exploratorios:
+*a.* temáticas priorizadas los últimos veinte años (Topic Modelling de los abstract)
+*b.* descripción de las agrupaciones por institución, país y el Di en la red de producción de les investigadores
+*c.*  relación entre las temáticas de investigación observadas y las caracteristicas estructurales de la red
+
+# Metodología
+
+Los datos se extrajeron de WoS, a partir del buscador, resultando en un data set con las variables a, b, c y d. 
+Para analizar las temáticas se usaron los abstract de WoS, eliminación de stopwords y limpieza del texto, tokenización. Topic Modelling con el paquete _tm X.X.X_ en R. Principios estadísticos que fundamentan la elección de esta técnica y especificidades. 
+Para realizar el posterior análisis de redes se usó el paquete _xx X.X.X_ en R. Definición de la red en tanto G=(V,E). Cantidad de nodos y relaciones, características identificadas para trabajar x y W. Principios de la muestra para realizar análisis uni y bivariado. Técnica a utilizar.  
+
+# Análisis
+## Temáticas
+Topic Modeling
+
+## Los productores en red
+Construcción y análisis descriptivo de la red
+
+## Estructura de la comunidad científica y creación de conocimiento social
+Análisis bivariado
+
+# Discusión
+Cómo se responde la pregunta 
+Futuras interrogantes
+>>>>>>> d75c2e678812f2d3a02c33066966c5303a24006f
 
 
 # Referencias
